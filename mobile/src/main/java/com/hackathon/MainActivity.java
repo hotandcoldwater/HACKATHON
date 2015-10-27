@@ -17,6 +17,7 @@
 package com.hackathon;
 
 import android.content.Context;
+import android.graphics.Color;
 import android.opengl.GLES20;
 import android.opengl.Matrix;
 import android.os.Bundle;
@@ -120,11 +121,13 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
   private CardboardOverlayView overlayView;
   private CardboardHUDView hudView;
 
-  private static final String X_AXIS = "com.hackathon.xaxis";
-  private static final String Y_AXIS = "com.hackathon.yaxis";
-  private static final String Z_AXIS = "com.hackathon.zaxis";
   private GoogleApiClient mGoogleApiClient;
-    private CardboardView mCardboardView;
+  private CardboardView mCardboardView;
+
+  private long headTst = 0;
+  private int lookingCount = 0;
+  private int outfocusCount = 0;
+  private boolean lockin = false;
   /**
    * Converts a raw text file, saved as a resource, into an OpenGL ES shader.
    *
@@ -468,8 +471,9 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
 
     // Set the normal positions of the cube, again for shading
     GLES20.glVertexAttribPointer(cubeNormalParam, 3, GLES20.GL_FLOAT, false, 0, cubeNormals);
-    GLES20.glVertexAttribPointer(cubeColorParam, 4, GLES20.GL_FLOAT, false, 0,
-            isLookingAtObject() ? cubeFoundColors : cubeColors);
+    //GLES20.glVertexAttribPointer(cubeColorParam, 4, GLES20.GL_FLOAT, false, 0,
+    //        isLookingAtObject() ? cubeFoundColors : cubeColors);
+    GLES20.glVertexAttribPointer(cubeColorParam, 4, GLES20.GL_FLOAT, false, 0, cubeColors);
 
     GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, 36);
     checkGLError("Drawing cube");
@@ -602,18 +606,74 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
 
   }
 
+  public void processLockin(){
+    if(lockin == true){
+      if(isLookingAtObject()==false){
+        outfocusCount++;
+      }
+      else{
+        outfocusCount = 0;
+      }
+
+      if(outfocusCount == 20){
+        lockin = false;
+        outfocusCount = 0;
+        lookingCount = 0;
+      }
+    }
+    else{
+      if(isLookingAtObject() == true){
+        lookingCount++;
+      }
+      else
+      {
+        if(lookingCount>0)
+          lookingCount--;
+      }
+
+      if(lookingCount == 20){
+        lockin = true;
+        outfocusCount = 0;
+        lookingCount = 0;
+      }
+
+    }
+  }
   @Override
   public void onDataChanged(DataEventBuffer dataEventBuffer) {
       for(DataEvent event : dataEventBuffer){
+        Log.d("onDataChanged", ""+event.getDataItem().getUri().getPath() );
         if(event.getType() == DataEvent.TYPE_CHANGED){
           DataItem item = event.getDataItem();
           if(item.getUri().getPath().compareTo("/head") == 0){
             DataMap dataMap = DataMapItem.fromDataItem(item).getDataMap();
-            for(int i=0; i<16; ++i){
-              headView[i] = dataMap.getFloat(HEAD_PRE+i);
+            long temp_tst = dataMap.getLong("time");
+            if(temp_tst > headTst){
+              headTst = temp_tst;
+              for(int i=0; i<16; ++i){
+                headView[i] = dataMap.getFloat(HEAD_PRE+i);
+              }
+              processLockin();
+            }
+          }
+          else if(item.getUri().getPath().compareTo("/shoot") == 0){
+            DataMap dataMap = DataMapItem.fromDataItem(item).getDataMap();
+            if(dataMap.getInt("shoot") == 1){
+              shootAction();
             }
           }
         }
       }
+  }
+
+  public void shootAction(){
+    if(lockin == true) {
+      score++;
+      overlayView.show3DToast("Found it! Look around for another one.\nScore = " + score);
+      hideObject();
+    }
+    else {
+      overlayView.show3DToast("Look around to find the object!");
+    }
   }
 }

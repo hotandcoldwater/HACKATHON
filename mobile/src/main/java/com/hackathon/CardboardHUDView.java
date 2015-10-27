@@ -63,25 +63,13 @@ public class CardboardHUDView extends LinearLayout {
 
     // Set some reasonable defaults.
     setDepthOffset(0.01f);
-    setColor(Color.rgb(255, 0, 0));
+    //setColor(Color.rgb(255, 0, 0));
     setVisibility(View.VISIBLE);
 
     textFadeAnimation = new AlphaAnimation(1.0f, 0.0f);
     textFadeAnimation.setDuration(5000);
 
     aimPt = new Point(this.getWidth()/2, this.getHeight()/2);
-  }
-
-  public void show3DToast(String message) {
-    setText(message);
-    setTextAlpha(1f);
-    textFadeAnimation.setAnimationListener(new EndAnimationListener() {
-      @Override
-      public void onAnimationEnd(Animation animation) {
-        setTextAlpha(0f);
-      }
-    });
-    startAnimation(textFadeAnimation);
   }
 
   private abstract class EndAnimationListener implements Animation.AnimationListener {
@@ -106,7 +94,7 @@ public class CardboardHUDView extends LinearLayout {
     rightView.setTextViewAlpha(alpha);
   }
 
-  private void setColor(int color) {
+  public void setColor(int color) {
     leftView.setColor(color);
     rightView.setColor(color);
   }
@@ -145,7 +133,6 @@ public class CardboardHUDView extends LinearLayout {
       mPaint.setStyle(Paint.Style.FILL_AND_STROKE);
       mPaint.setStrokeWidth(10);
       mPaint.setColor(Color.RED);
-
     }
 
     @Override
@@ -156,7 +143,6 @@ public class CardboardHUDView extends LinearLayout {
       canvas.drawLine(aimPoint.x, aimPoint.y - aimHeight, aimPoint.x, aimPoint.y, mPaint);
 
       //south aim
-      //canvas.drawLine(aimPoint.x, this.getHeight(), aimPoint.x, aimPoint.y, mPaint);
       canvas.drawLine(aimPoint.x, aimPoint.y+aimHeight, aimPoint.x, aimPoint.y, mPaint);
 
       //east aim
@@ -167,8 +153,10 @@ public class CardboardHUDView extends LinearLayout {
     }
 
     public void setColor(int color) {
+      Log.d("SHOOT", "hud setColor: "+ color);
       imageView.setColorFilter(color);
       textView.setTextColor(color);
+      mPaint.setColor(color);
     }
 
     public void setText(String text) {
