@@ -99,13 +99,18 @@ public class CardboardHUDView extends LinearLayout {
     rightView.setColor(color);
   }
 
+  public void setLockin(boolean lockin){
+    leftView.setLockin(lockin);
+    rightView.setLockin(lockin);
+  }
+
   /**
    * A simple view group containing some horizontally centered text underneath a horizontally
    * centered image.
    *
    * <p>This is a helper class for CardboardOverlayView.
    */
-  private class CardboardOverlayEyeView extends ViewGroup {
+  private class CardboardOverlayEyeView extends View {
     private final ImageView imageView;
     private final TextView textView;
     private float offset;
@@ -114,6 +119,8 @@ public class CardboardHUDView extends LinearLayout {
     private int aimHeight;
     private int aimWidth;
     private Point aimPoint;
+
+    private boolean lockin = false;
 
     public CardboardOverlayEyeView(Context context, AttributeSet attrs) {
       super(context, attrs);
@@ -132,26 +139,59 @@ public class CardboardHUDView extends LinearLayout {
       mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
       mPaint.setStyle(Paint.Style.FILL_AND_STROKE);
       mPaint.setStrokeWidth(10);
-      mPaint.setColor(Color.RED);
     }
 
     @Override
-    protected void dispatchDraw(Canvas canvas) {
-      super.dispatchDraw(canvas);
+    protected void onDraw(Canvas canvas) {
+      super.onDraw(canvas);
 
+      Log.d("TEST", "onDraw");
+
+      if(lockin == true)
+        mPaint.setColor(Color.GREEN);
+      else
+        mPaint.setColor(Color.RED);
       //north aim
       canvas.drawLine(aimPoint.x, aimPoint.y - aimHeight, aimPoint.x, aimPoint.y, mPaint);
 
       //south aim
-      canvas.drawLine(aimPoint.x, aimPoint.y+aimHeight, aimPoint.x, aimPoint.y, mPaint);
+      canvas.drawLine(aimPoint.x, aimPoint.y + aimHeight, aimPoint.x, aimPoint.y, mPaint);
 
       //east aim
-      canvas.drawLine(aimPoint.x-aimWidth, aimPoint.y, aimPoint.x, aimPoint.y, mPaint);
+      canvas.drawLine(aimPoint.x - aimWidth, aimPoint.y, aimPoint.x, aimPoint.y, mPaint);
 
       //west aim
-      canvas.drawLine(aimPoint.x+aimWidth, aimPoint.y, aimPoint.x, aimPoint.y, mPaint);
+      canvas.drawLine(aimPoint.x + aimWidth, aimPoint.y, aimPoint.x, aimPoint.y, mPaint);
     }
+/*
+    @Override
+    protected void dispatchDraw(Canvas canvas) {
+      super.dispatchDraw(canvas);
+      Log.d("SHOOT", "lockin="+lockin);
 
+      if(lockin == true)
+        mPaint.setColor(Color.GREEN);
+      else
+        mPaint.setColor(Color.RED);
+      //north aim
+      canvas.drawLine(aimPoint.x, aimPoint.y - aimHeight, aimPoint.x, aimPoint.y, mPaint);
+
+      mPaint.setColor(Color.GREEN);
+      //south aim
+      canvas.drawLine(aimPoint.x, aimPoint.y + aimHeight, aimPoint.x, aimPoint.y, mPaint);
+
+      //east aim
+      canvas.drawLine(aimPoint.x - aimWidth, aimPoint.y, aimPoint.x, aimPoint.y, mPaint);
+
+      //west aim
+      canvas.drawLine(aimPoint.x + aimWidth, aimPoint.y, aimPoint.x, aimPoint.y, mPaint);
+    }
+    */
+
+    public void setLockin(boolean lockin){
+      this.lockin = lockin;
+      invalidate();
+    }
     public void setColor(int color) {
       Log.d("SHOOT", "hud setColor: "+ color);
       imageView.setColorFilter(color);

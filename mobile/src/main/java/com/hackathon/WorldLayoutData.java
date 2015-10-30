@@ -279,22 +279,6 @@ public final class WorldLayoutData {
             -1.0f, -1.0f, 1.0f,
             -1.0f, -1.0f, -1.0f,
     };
-  public static final float[] AIM_COORDS2 = new float[] {
-          -50.0f, 50.0f, 0.0f,
-          -50.0f, -50.0f, 0.0f,
-          50f, 50f, 0f,
-          -50f, -50f, 0f,
-          50f, -50f, 0f,
-          50f, 50f, 0f
-          /*
-          -0.5f, 0.5f, 0.0f,
-          -0.5f, -0.5f, 0.0f,
-          0.5f, 0.5f, 0.0f,
-          -0.5f, -0.5f, 0.0f,
-          0.5f, -0.5f, 0.0f,
-          0.5f, 0.5f, 0.0f
-          */
-  };
 
   public static final float[] FLOOR_NORMALS = new float[] {
       0.0f, 1.0f, 0.0f,

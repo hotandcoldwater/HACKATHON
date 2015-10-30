@@ -17,10 +17,12 @@
 package com.hackathon;
 
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
 import android.opengl.GLES20;
 import android.opengl.Matrix;
 import android.os.Bundle;
+import android.os.Handler;
 import android.os.Vibrator;
 import android.util.Log;
 
@@ -58,6 +60,17 @@ import javax.microedition.khronos.egl.EGLConfig;
 public class MainActivity extends CardboardActivity implements CardboardView.StereoRenderer, GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, DataApi.DataListener {
 
   private static final String TAG = "MainActivity";
+
+  private static final String HEAD_PRE = "com.hackathon.head";
+  private static final String STATUS = "status";
+  private static final String HEAD = "head";
+  private static final String SHOOT = "shoot";
+  private static final String RESTART = "restart";
+  private static final String RESUME = "resume";
+  private static final String PAUSE = "pause";
+  private static final int STATUS_PAUSE = 0;
+  private static final int STATUS_PLAYING = 1;
+  private static final int STATUS_END = 2;
 
   private static final float Z_NEAR = 0.1f;
   private static final float Z_FAR = 100.0f;
@@ -111,7 +124,6 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
   private float[] modelView;
   private float[] modelFloor;
 
-  private static final String HEAD_PRE = "com.hackathon.head";
 
   private int score = 0;
   private float objectDistance = 12f;
@@ -125,9 +137,19 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
   private CardboardView mCardboardView;
 
   private long headTst = 0;
+  private final int lookingThreshold = 15;
   private int lookingCount = 0;
   private int outfocusCount = 0;
   private boolean lockin = false;
+  private float[] objectPos;
+  private float[] approachFactor;
+  private final float approachFrame = 500;
+
+  // 0 = pasue
+  // 1 = playing
+  // 2 = end of game
+  private int gameStatus = STATUS_PAUSE;
+
   /**
    * Converts a raw text file, saved as a resource, into an OpenGL ES shader.
    *
@@ -193,6 +215,7 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
     modelView = new float[16];
     modelFloor = new float[16];
     headView = new float[16];
+    objectPos = new float[3];
     vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
 
     overlayView = (CardboardOverlayView) findViewById(R.id.overlay);
@@ -205,6 +228,8 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
             .addConnectionCallbacks(this)
             .addOnConnectionFailedListener(this)
             .build();
+
+    //startActivity(new Intent(this, Splash.class));
   }
 
   @Override
@@ -329,6 +354,7 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
     // Object first appears directly in front of user.
     Matrix.setIdentityM(modelCube, 0);
     Matrix.translateM(modelCube, 0, 0, 0, -objectDistance);
+    hideObject();
 
     Matrix.setIdentityM(modelFloor, 0);
     Matrix.translateM(modelFloor, 0, 0, -floorDepth, 0); // Floor appears below user.
@@ -369,6 +395,9 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
     // Build the Model part of the ModelView matrix.
     Matrix.rotateM(modelCube, 0, TIME_DELTA, 0.5f, 0.5f, 1.0f);
 
+    //make object closer to eye.
+    moveCube();
+
     // Build the camera matrix and apply it to the ModelView.
     Matrix.setLookAtM(camera, 0, 0.0f, 0.0f, CAMERA_Z, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f);
 
@@ -376,6 +405,51 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
     requestHead();
 
     checkGLError("onReadyToDraw");
+  }
+
+  public void moveCube(){
+    //Log.d("moveCube", "before objectPos[0]"+objectPos[0]);
+    //Log.d("moveCube", "before objectPos[1]"+objectPos[1]);
+    //Log.d("moveCube", "before objectPos[2]"+objectPos[2]);
+    if(gameStatus == STATUS_PLAYING) {
+      if (objectPos[0] < 0) {
+        if (objectPos[0] - approachFactor[0] < 0) {
+          Matrix.translateM(modelCube, 0, -approachFactor[0], 0, 0);
+          objectPos[0] -= approachFactor[0];
+        }
+      } else {
+        if (objectPos[0] - approachFactor[0] > 0) {
+          Matrix.translateM(modelCube, 0, -approachFactor[0], 0, 0);
+          objectPos[0] -= approachFactor[0];
+        }
+      }
+
+      if (objectPos[1] < 0) {
+        if (objectPos[1] - approachFactor[1] < 0) {
+          Matrix.translateM(modelCube, 0, 0, -approachFactor[1], 0);
+          objectPos[1] -= approachFactor[1];
+        }
+      } else {
+        if (objectPos[1] - approachFactor[1] > 0)
+          Matrix.translateM(modelCube, 0, 0, -approachFactor[1], 0);
+        objectPos[1] -= approachFactor[1];
+      }
+
+      if (objectPos[2] < 0) {
+        if (objectPos[2] - approachFactor[2] < 0) {
+          Matrix.translateM(modelCube, 0, 0, 0, -approachFactor[2]);
+          objectPos[2] -= approachFactor[2];
+        }
+      } else {
+        if (objectPos[2] - approachFactor[2] > 0) {
+          Matrix.translateM(modelCube, 0, 0, 0, -approachFactor[2]);
+          objectPos[2] -= approachFactor[2];
+        }
+      }
+    }
+    //Log.d("moveCube", "after objectPos[0]"+objectPos[0]);
+    //Log.d("moveCube", "after objectPos[1]"+objectPos[1]);
+    //Log.d("moveCube", "after objectPos[2]"+objectPos[2]);
   }
 
   public void requestHead(){
@@ -387,11 +461,11 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
               @Override
               public void onResult(DataApi.DataItemResult dataItemResult) {
                 if (dataItemResult.getStatus().isSuccess()) {
-                  Log.d("TEST", "Data item set: " + dataItemResult.getDataItem().getUri());
+                  Log.d("DataLayer", "Data item set: " + dataItemResult.getDataItem().getUri());
                 } else if (dataItemResult.getStatus().isCanceled()) {
-                  Log.d("TEST", "canceled");
+                  Log.d("DataLayer", "canceled");
                 } else if (dataItemResult.getStatus().isInterrupted()) {
-                  Log.d("TEST", "interrupted");
+                  Log.d("DataLayer", "interrupted");
                 }
               }
             });
@@ -513,7 +587,7 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
   @Override
   public void onCardboardTrigger() {
     Log.i(TAG, "onCardboardTrigger");
-
+/*
     if (isLookingAtObject()) {
       score++;
       overlayView.show3DToast("Found it! Look around for another one.\nScore = " + score);
@@ -524,6 +598,7 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
 
     // Always give user feedback.
     vibrator.vibrate(50);
+    */
   }
 
   /**
@@ -540,7 +615,8 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
     float angleXZ = (float) Math.random() * 180 + 90;
     Matrix.setRotateM(rotationMatrix, 0, angleXZ, 0f, 1f, 0f);
     float oldObjectDistance = objectDistance;
-    objectDistance = (float) Math.random() * 15 + 5;
+    //objectDistance = (float) Math.random() * 15 + 5;
+    objectDistance = (float) Math.random() * 15 + 25;
     float objectScalingFactor = objectDistance / oldObjectDistance;
     Matrix.scaleM(rotationMatrix, 0, objectScalingFactor, objectScalingFactor,
             objectScalingFactor);
@@ -553,6 +629,21 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
 
     Matrix.setIdentityM(modelCube, 0);
     Matrix.translateM(modelCube, 0, posVec[0], newY, posVec[2]);
+    objectPos[0] = posVec[0];
+    objectPos[1] = newY;
+    objectPos[2] = posVec[2];
+    decideFactor();
+  }
+
+  public void decideFactor(){
+    approachFactor = new float[3];
+
+    approachFactor[0] = objectPos[0] / approachFrame;
+    approachFactor[1] = objectPos[1] / approachFrame;
+    approachFactor[2] = objectPos[2] / approachFrame;
+    Log.d("decideFactor", "0:"+approachFactor[0]);
+    Log.d("decideFactor", "1:"+approachFactor[1]);
+    Log.d("decideFactor", "2:" + approachFactor[2]);
   }
 
   /**
@@ -577,35 +668,40 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
   @Override
   protected void onResume() {
     super.onResume();
-    mGoogleApiClient.connect();
-    Log.d("TEST", "onResume");
+    if(mGoogleApiClient != null) mGoogleApiClient.connect();
   }
 
   @Override
   protected void onPause() {
     super.onPause();
-    Wearable.DataApi.removeListener(mGoogleApiClient, this);
-    mGoogleApiClient.disconnect();
-    Log.d("TEST", "onPause");
+    if(mGoogleApiClient != null) Wearable.DataApi.removeListener(mGoogleApiClient, this);
+    if(mGoogleApiClient != null && mGoogleApiClient.isConnected()) mGoogleApiClient.disconnect();
   }
 
   @Override
   public void onConnected(Bundle bundle) {
     Wearable.DataApi.addListener(mGoogleApiClient, this);
-    Log.d("TEST", "onConnected");
   }
 
   @Override
   public void onConnectionSuspended(int i) {
-
   }
 
   @Override
   public void onConnectionFailed(ConnectionResult connectionResult) {
-    Log.d("TEST", "onConnectionFailed");
-
   }
 
+  public void initLockin(){
+    lockin = false;
+    outfocusCount = 0;
+    lookingCount = 0;
+    runOnUiThread(new Runnable() {
+      @Override
+      public void run() {
+        hudView.setLockin(lockin);
+      }
+    });
+  }
   public void processLockin(){
     if(lockin == true){
       if(isLookingAtObject()==false){
@@ -615,10 +711,16 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
         outfocusCount = 0;
       }
 
-      if(outfocusCount == 20){
+      if(outfocusCount == lookingThreshold){
         lockin = false;
         outfocusCount = 0;
         lookingCount = 0;
+        runOnUiThread(new Runnable() {
+          @Override
+          public void run() {
+            hudView.setLockin(lockin);
+          }
+        });
       }
     }
     else{
@@ -627,14 +729,20 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
       }
       else
       {
-        if(lookingCount>0)
+        if(lookingCount > 0)
           lookingCount--;
       }
 
-      if(lookingCount == 20){
+      if(lookingCount == lookingThreshold){
         lockin = true;
         outfocusCount = 0;
         lookingCount = 0;
+        runOnUiThread(new Runnable() {
+          @Override
+          public void run() {
+            hudView.setLockin(lockin);
+          }
+        });
       }
 
     }
@@ -642,38 +750,100 @@ public class MainActivity extends CardboardActivity implements CardboardView.Ste
   @Override
   public void onDataChanged(DataEventBuffer dataEventBuffer) {
       for(DataEvent event : dataEventBuffer){
-        Log.d("onDataChanged", ""+event.getDataItem().getUri().getPath() );
         if(event.getType() == DataEvent.TYPE_CHANGED){
           DataItem item = event.getDataItem();
-          if(item.getUri().getPath().compareTo("/head") == 0){
-            DataMap dataMap = DataMapItem.fromDataItem(item).getDataMap();
+          DataMap dataMap = DataMapItem.fromDataItem(item).getDataMap();
+          String path = item.getUri().getPath();
+          Log.d("onDataChanged", "path="+path);
+          Log.d("onDataChanged", "status="+gameStatus);
+          if(path.compareTo("/" + HEAD) == 0){
             long temp_tst = dataMap.getLong("time");
-            if(temp_tst > headTst){
+            if(temp_tst > headTst && gameStatus == STATUS_PLAYING){
               headTst = temp_tst;
-              for(int i=0; i<16; ++i){
-                headView[i] = dataMap.getFloat(HEAD_PRE+i);
-              }
+              for(int i=0; i<16; ++i) headView[i] = dataMap.getFloat(HEAD_PRE+i);
               processLockin();
             }
           }
-          else if(item.getUri().getPath().compareTo("/shoot") == 0){
-            DataMap dataMap = DataMapItem.fromDataItem(item).getDataMap();
-            if(dataMap.getInt("shoot") == 1){
-              shootAction();
+          else if(path.compareTo("/"+SHOOT) == 0){
+            if(dataMap.getInt(SHOOT) == 1 && gameStatus == STATUS_PLAYING){
+              runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                  shootAction();
+                }
+              });
+            }
+          }
+          else if(path.compareTo("/"+PAUSE) == 0){
+            if(dataMap.getInt(PAUSE) == 1 && gameStatus == STATUS_PLAYING){
+              gameStatus = STATUS_PAUSE;
+              sendMessage(PAUSE);
+            }
+          }
+          else if(path.compareTo("/"+RESUME) == 0){
+            if(dataMap.getInt(RESUME) == 1 && gameStatus == STATUS_PAUSE){
+              gameStatus = STATUS_PLAYING;
+              sendMessage(RESUME);
+            }
+          }
+          else if(path.compareTo("/"+RESTART) == 0){
+            if(dataMap.getInt(RESTART) == 1 && gameStatus == STATUS_PAUSE){
+              runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                  restartGame();
+                }
+              });
+              gameStatus = STATUS_PLAYING;
+              sendMessage(RESTART);
+            }
+          }
+          else if(path.compareTo("/"+STATUS) == 0){
+            if(dataMap.getInt(STATUS) == 1){
+              if(gameStatus == STATUS_PLAYING)
+                sendMessage(RESUME);
+              else
+                sendMessage(PAUSE);
             }
           }
         }
       }
   }
 
-  public void shootAction(){
-    if(lockin == true) {
+  public void restartGame(){
+    //do something.
+    score = 0;
+    hideObject();
+  }
+
+  public void shootAction() {
+    Log.d("SHOOT", "shootAction");
+    if (lockin == true) {
       score++;
       overlayView.show3DToast("Found it! Look around for another one.\nScore = " + score);
       hideObject();
-    }
-    else {
+      initLockin();
+    } else {
       overlayView.show3DToast("Look around to find the object!");
     }
+  }
+  void sendMessage(String str){
+    Log.d("sendMessage", "message= "+str);
+    PutDataMapRequest req = PutDataMapRequest.create("/"+str);
+    req.getDataMap().putInt(str, 1);
+    req.getDataMap().putLong("time", new Date().getTime());
+    Wearable.DataApi.putDataItem(mGoogleApiClient, req.asPutDataRequest())
+            .setResultCallback(new ResultCallback<DataApi.DataItemResult>() {
+              @Override
+              public void onResult(DataApi.DataItemResult dataItemResult) {
+                if (dataItemResult.getStatus().isSuccess()) {
+                  Log.d("TEST", "Data item set: " + dataItemResult.getDataItem().getUri());
+                } else if (dataItemResult.getStatus().isCanceled()) {
+                  Log.d("TEST", "canceled");
+                } else if (dataItemResult.getStatus().isInterrupted()) {
+                  Log.d("TEST", "interrupted");
+                }
+              }
+            });
   }
 }

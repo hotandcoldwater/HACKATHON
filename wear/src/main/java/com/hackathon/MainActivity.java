@@ -1,17 +1,20 @@
 package com.hackathon;
 
 import android.content.Context;
+import android.gesture.Gesture;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
-import android.opengl.Matrix;
 import android.os.Bundle;
 import android.os.Vibrator;
 import android.support.wearable.activity.WearableActivity;
 import android.support.wearable.view.BoxInsetLayout;
 import android.util.Log;
-import android.widget.TextView;
+import android.view.GestureDetector;
+import android.view.MotionEvent;
+import android.view.View;
+import android.widget.ImageView;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
@@ -33,12 +36,23 @@ import java.util.Timer;
 import java.util.TimerTask;
 
 public class MainActivity extends WearableActivity implements SensorEventListener, GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, DataApi.DataListener {
+    private static final String X_AXIS = "com.hackathon.xaxis";
+    private static final String Y_AXIS = "com.hackathon.yaxis";
+    private static final String Z_AXIS = "com.hackathon.zaxis";
+    private static final String HEAD_PRE = "com.hackathon.head";
+
+    private static final String STATUS = "status";
+    private static final String SHOOT = "shoot";
+    private static final String RESTART = "restart";
+    private static final String RESUME = "resume";
+    private static final String PAUSE = "pause";
 
     private static final SimpleDateFormat AMBIENT_DATE_FORMAT =
             new SimpleDateFormat("HH:mm", Locale.US);
 
     private BoxInsetLayout mContainerView;
-    private TextView mTextView;
+    private ImageView mImageView;
+    private GestureDetector gestureDetector;
 
     private SensorManager mSensorManager;
     private Sensor mHeartSensor;
@@ -49,16 +63,14 @@ public class MainActivity extends WearableActivity implements SensorEventListene
     private float[] headView;
 
     private GoogleApiClient mGoogleApiClient;
-    private static final String X_AXIS = "com.hackathon.xaxis";
-    private static final String Y_AXIS = "com.hackathon.yaxis";
-    private static final String Z_AXIS = "com.hackathon.zaxis";
 
     private boolean buff = false;
     private float gyro_x=0;
     private float gyro_y=0;
     private float gyro_z=0;
 
-    private static final String HEAD_PRE = "com.hackathon.head";
+    private boolean gameStatus = false;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -67,14 +79,21 @@ public class MainActivity extends WearableActivity implements SensorEventListene
         setAmbientEnabled();
 
         mContainerView = (BoxInsetLayout) findViewById(R.id.container);
-        mTextView = (TextView) findViewById(R.id.text);
+        mImageView = (ImageView) findViewById(R.id.imageView);
+
+        gestureDetector = new GestureDetector(getApplicationContext(), new GameGestureListener());
+
+        mImageView.setOnTouchListener(new View.OnTouchListener() {
+
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                return gestureDetector.onTouchEvent(event);
+            }
+        });
 
         mSensorManager = (SensorManager)getSystemService(Context.SENSOR_SERVICE);
         mGyroSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE);
         mHeartSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_HEART_RATE);
-        if(mHeartSensor == null){
-            Log.d("HEART","HEART is UNABLABLE");
-        }
 
         mGoogleApiClient = new GoogleApiClient.Builder(this)
                 .addApi(Wearable.API)
@@ -113,9 +132,10 @@ public class MainActivity extends WearableActivity implements SensorEventListene
         });
     }
 
-    void sendShootMessage(){
-        PutDataMapRequest req = PutDataMapRequest.create("/shoot");
-        req.getDataMap().putInt("shoot", 1);
+    void sendMessage(String str){
+        Log.d("sendMessage", "Message: "+str);
+        PutDataMapRequest req = PutDataMapRequest.create("/"+str);
+        req.getDataMap().putInt(str, 1);
         req.getDataMap().putLong("time", new Date().getTime());
         Wearable.DataApi.putDataItem(mGoogleApiClient, req.asPutDataRequest())
         .setResultCallback(new ResultCallback<DataApi.DataItemResult>() {
@@ -151,51 +171,45 @@ public class MainActivity extends WearableActivity implements SensorEventListene
     }
 
     private void updateDisplay() {
-        Log.d("TEST", "updateDisplay");
         if (isAmbient()) {
             mContainerView.setBackgroundColor(getResources().getColor(android.R.color.black));
-            mTextView.setTextColor(getResources().getColor(android.R.color.white));
         } else {
             mContainerView.setBackground(null);
-            mTextView.setTextColor(getResources().getColor(android.R.color.black));
         }
-        mTextView.setText(""+mHeartRate);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        Wearable.DataApi.removeListener(mGoogleApiClient, this);
-        mSensorManager.unregisterListener(this);
-        mGoogleApiClient.disconnect();
-        mHeadTracker.stopTracking();
+        if(mGoogleApiClient != null) Wearable.DataApi.removeListener(mGoogleApiClient, this);
+        if(mSensorManager != null) mSensorManager.unregisterListener(this);
+        if(mGoogleApiClient != null && mGoogleApiClient.isConnected()) mGoogleApiClient.disconnect();
+        if(mHeadTracker != null) mHeadTracker.stopTracking();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        Wearable.DataApi.addListener(mGoogleApiClient, this);
-        mSensorManager.registerListener(this, mHeartSensor, SensorManager.SENSOR_DELAY_NORMAL);
-        mSensorManager.registerListener(this, mGyroSensor, SensorManager.SENSOR_DELAY_NORMAL);
-        mGoogleApiClient.connect();
-        this.mHeadTracker.startTracking();
+        if(mSensorManager != null){
+            mSensorManager.registerListener(this, mGyroSensor, SensorManager.SENSOR_DELAY_NORMAL);
+            mSensorManager.registerListener(this, mHeartSensor, SensorManager.SENSOR_DELAY_NORMAL);
+        }
+        if(mGoogleApiClient != null) mGoogleApiClient.connect();
+        if(mHeadTracker != null) mHeadTracker.startTracking();
     }
 
     @Override
     public void onConnected(Bundle bundle) {
-        Log.d("TEST", "onConnected");
+        if(mGoogleApiClient != null) Wearable.DataApi.addListener(mGoogleApiClient, this);
+        sendMessage(STATUS);
     }
 
     @Override
     public void onConnectionSuspended(int i) {
-        Log.d("TEST", "onConnectionSuspended");
-
     }
 
     @Override
     public void onConnectionFailed(ConnectionResult connectionResult) {
-        Log.d("TEST", "onConnectionFailed");
-
     }
 
     @Override
@@ -203,11 +217,28 @@ public class MainActivity extends WearableActivity implements SensorEventListene
         for(DataEvent event : dataEventBuffer){
             if(event.getType() == DataEvent.TYPE_CHANGED){
                 DataItem item = event.getDataItem();
+                DataMap dataMap = DataMapItem.fromDataItem(item).getDataMap();
                 if(item.getUri().getPath().compareTo("/headReq") == 0){
-                    DataMap dataMap = DataMapItem.fromDataItem(item).getDataMap();
-                    if(dataMap.getInt("head")==1)
+                    if(dataMap.getInt("head")==1 && gameStatus == true){
                         sendHeadVector();
+                    }
                 }
+                else if(item.getUri().getPath().compareTo("/"+RESUME) ==0){
+                    if(dataMap.getInt(RESUME)==1){
+                       gameStatus = true;
+                    }
+                }
+                else if(item.getUri().getPath().compareTo("/"+PAUSE) ==0){
+                    if(dataMap.getInt(PAUSE)==1){
+                        gameStatus = false;
+                    }
+                }
+                else if(item.getUri().getPath().compareTo("/"+RESTART) ==0){
+                    if(dataMap.getInt(RESTART)==1){
+                        gameStatus = true;
+                    }
+                }
+
             }
         }
     }
@@ -217,7 +248,6 @@ public class MainActivity extends WearableActivity implements SensorEventListene
         Log.d("Sensor", "onSensorChanged");
         if(event.sensor.getType() == Sensor.TYPE_HEART_RATE){
             mHeartRate = event.values[0];
-            Log.d("HEART",""+ mHeartRate );
             updateDisplay();
         }
         else if (event.sensor.getType() == Sensor.TYPE_GYROSCOPE) {
@@ -234,9 +264,9 @@ public class MainActivity extends WearableActivity implements SensorEventListene
                     new Timer().schedule(new TimerTask() {
                         public void run() {
                             if (gyro_z >= 3) {
-                                if (buff == true) {
+                                if (buff == true && gameStatus == true) {
                                     vibe.vibrate(500);
-                                    sendShootMessage();
+                                    sendMessage(SHOOT);
                                     new Timer().schedule(new TimerTask() {
                                         public void run() {
                                             buff = false;
@@ -255,4 +285,35 @@ public class MainActivity extends WearableActivity implements SensorEventListene
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
 
     }
+    private class GameGestureListener extends GestureDetector.SimpleOnGestureListener{
+        @Override
+        public boolean onSingleTapConfirmed(MotionEvent e) {
+            Log.d("Touch", "onSingle");
+            if(gameStatus == true){
+                sendMessage(PAUSE);
+            }
+            else{
+                sendMessage(RESUME);
+            }
+            return true;
+        }
+
+        @Override
+        public boolean onDown(MotionEvent e) {
+            return true;
+        }
+
+        @Override
+        public boolean onDoubleTapEvent(MotionEvent e) {
+            Log.d("Touch", "onDouble");
+            Log.d("Touch", "gameStatus:"+gameStatus);
+            if(gameStatus == false){
+                sendMessage(RESTART);
+                //todo
+                //change image.
+            }
+            return true;
+        }
+    }
 }
+
